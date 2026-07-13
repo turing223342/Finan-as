@@ -2,41 +2,71 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Finan-as V2</title>
 <style>
-body{font-family:Arial;background:#f5f5f5;margin:0;padding:20px}
-.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:15px}
-.card{background:white;padding:20px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1)}
-.card h3{margin:0 0 10px 0}
-.btn{background:#667eea;color:white;padding:10px 20px;border:none;border-radius:5px;cursor:pointer;text-decoration:none;display:inline-block}
+body{font-family:'Segoe UI',Arial;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);margin:0;padding:20px;min-height:100vh}
+.container{max-width:1200px;margin:0 auto}
+.header{display:flex;justify-content:space-between;align-items:center;background:white;padding:20px;border-radius:15px;margin-bottom:20px;box-shadow:0 5px 15px rgba(0,0,0,0.2)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
+.card{background:white;padding:25px;border-radius:15px;box-shadow:0 5px 15px rgba(0,0,0,0.2)}
+.card h3{margin:0 0 15px 0;font-size:20px}
+.progresso{background:#eee;height:10px;border-radius:5px;overflow:hidden;margin:10px 0}
+.barra{background:linear-gradient(90deg,#667eea,#764ba2);height:100%}
+.saldo{font-size:24px;font-weight:bold;color:#667eea}
 .alert{color:red;font-weight:bold}
+.btn{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:10px 20px;border:none;border-radius:8px;cursor:pointer;text-decoration:none;display:inline-block;margin:5px}
+input{padding:8px;border:2px solid #ddd;border-radius:5px;width:100px;margin-right:5px}
+.flash{padding:10px;background:#d4edda;color:#155724;border-radius:5px;margin-bottom:15px}
 </style>
 </head>
 <body>
+<div class="container">
 <div class="header">
-<h1>Finan-as V2</h1>
+<h1>📊 Finan-as V2</h1>
+<div>
+Saldo Total: <b>R$ {{ "%.2f"|format(salario_total - total_gasto) }}</b>
 <a href="/logout" class="btn">Sair</a>
 </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}{% for category, message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<form method="POST" action="/lancar_salario" style="background:white;padding:20px;border-radius:15px;margin-bottom:20px">
+<h3>💰 Lançar Salário do Mês</h3>
+<input type="text" name="salario" placeholder="Ex: 5000,00" required>
+<button class="btn" type="submit">Definir Salário</button>
+<a href="/zerar_mes" class="btn" style="background:red">Zerar Mês</a>
+<a href="/exportar" class="btn" style="background:green">📥 Exportar Excel</a>
+</form>
 
 <div class="cards">
 {% for cat in categorias %}
 <div class="card">
-<h3>{{ cat.nome }}</h3>
+<h3>{{ cat.nome }} - {{ cat.percentual }}%</h3>
 <p>Definido: R$ {{ "%.2f"|format(cat.definido) }}</p>
 <p>Gasto: R$ {{ "%.2f"|format(cat.gasto) }}</p>
-<p>Saldo: R$ {{ "%.2f"|format(cat.saldo) }}</p>
-{% if cat.estourou %}<p class="alert">ESTOUROU!</p>{% endif %}
+<p class="saldo">Saldo: R$ {{ "%.2f"|format(cat.saldo) }}</p>
+{% if cat.estourou %}<p class="alert">⚠️ ESTOUROU!</p>{% endif %}
+
+<div class="progresso"><div class="barra" style="width:{{ cat.progresso_meta }}%"></div></div>
+
 <form method="POST" action="/gasto">
 <input type="hidden" name="categoria" value="{{ cat.nome }}">
-<input type="text" name="valor" placeholder="Valor R$">
-<button type="submit">Lançar</button>
+<input type="text" name="valor" placeholder="R$ 0,00">
+<input type="text" name="descricao" placeholder="Descrição">
+<button class="btn" type="submit">Lançar Gasto</button>
+</form>
+
+<form method="POST" action="/meta" style="margin-top:10px">
+<input type="hidden" name="categoria" value="{{ cat.nome }}">
+<input type="text" name="valor_meta" placeholder="Meta R$">
+<button class="btn" type="submit">Salvar Meta</button>
 </form>
 </div>
 {% endfor %}
 </div>
-
-<a href="/exportar" class="btn">Exportar Excel</a>
-<a href="/zerar_mes" class="btn">Zerar Mês</a>
+</div>
 </body>
 </html>
