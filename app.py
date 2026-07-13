@@ -24,7 +24,7 @@ def init_db():
         db.execute("INSERT INTO users (usuario, senha) VALUES (?,?)", ("admin", senha_hash))
     db.commit(); db.close()
 
-def converter_valor(v): 
+def converter_valor(v):
     try: return float(str(v).strip().replace('.', '').replace(',', '.'))
     except: return 0
 
@@ -104,18 +104,12 @@ def exportar():
     arquivo = os.path.join(DB_DIR, "gastos.xlsx"); wb.save(arquivo)
     return send_file(arquivo, as_attachment=True)
 
-@app.route("/login", methods=["GET", "POST", "HEAD"])
-def login():
-    if request.method == "POST":
-        return "", 204
-    flash("Esse app não tem login. Use direto na página inicial.", "error")
-    return redirect(url_for("index"))
-
 from werkzeug.exceptions import MethodNotAllowed
 
 @app.errorhandler(405)
 def handle_405(e):
-    if request.path == "/login":
+    # Se o erro 405 for em /login, responde 204 pra calar o bot. Senão mostra erro normal
+    if request.path == "/login" and request.method == "POST":
         return "", 204
     return "Method Not Allowed", 405
 
