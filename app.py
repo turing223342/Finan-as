@@ -4,14 +4,7 @@ import sqlite3
 from openpyxl import Workbook
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
-
-from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file
-from datetime import datetime
-import sqlite3
-from openpyxl import Workbook
-from werkzeug.security import generate_password_hash, check_password_hash
-import os
-import logging # <- ADICIONA ISSO
+import logging
 
 app = Flask(__name__)
 app.secret_key = "chave_super_secreta_2025"
@@ -24,45 +17,6 @@ class IgnoreLoginFilter(logging.Filter):
 logging.getLogger('werkzeug').addFilter(IgnoreLoginFilter())
 app.logger.addFilter(IgnoreLoginFilter())
 # FIM DO FILTRO
-
-DB_DIR = "/var/data" if os.path.isdir("/var/data") else os.path.dirname(os.path.abspath(__file__))
-DATABASE = os.path.join(DB_DIR, "ajuda_custo.db")
-
-CATEGORIAS = {'💊 Essenciais': 50, '📈 Ativos': 25, '🏦 Estabilidade': 15, '🎮 Lazer': 10}
-
-def init_db():
-    db = sqlite3.connect(DATABASE)
-    db.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, usuario TEXT UNIQUE, senha TEXT)')
-    db.execute('CREATE TABLE IF NOT EXISTS settings (user_id INT, chave TEXT, valor REAL, PRIMARY KEY(user_id,chave))')
-    db.execute('CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY, user_id INT, categoria TEXT, valor REAL, descricao TEXT, data TEXT)')
-    db.execute('CREATE TABLE IF NOT EXISTS metas (id INTEGER PRIMARY KEY, user_id INT, categoria TEXT, valor_meta REAL)')
-    if db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
-        senha_hash = generate_password_hash("1234")
-        db.execute("INSERT INTO users (usuario, senha) VALUES (?,?)", ("admin", senha_hash))
-    db.commit(); db.close()
-
-def converter_valor(v):
-    try: return float(str(v).strip().replace('.', '').replace(',', '.'))
-    except: return 0
-
-@app.route("/login", methods=["GET","POST"])
-def login():
-    if request.method == "POST":
-        db = sqlite3.connect(DATABASE)
-        user = db.execute("SELECT * FROM users WHERE usuario=?", (request.form["usuario"],)).fetchone()
-        if user and check_password_hash(user[2], request.form["senha"]):
-            session["user_id"] = user[0]; db.close()
-            return redirect(url_for("index"))
-        flash("Usuário ou senha inválidos", "error"); db.close()
-    return render_template("login.html")
-
-#... resto do seu código continua igual...
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
-app = Flask(__name__)
-app.secret_key = "chave_super_secreta_2025"
 
 DB_DIR = "/var/data" if os.path.isdir("/var/data") else os.path.dirname(os.path.abspath(__file__))
 DATABASE = os.path.join(DB_DIR, "ajuda_custo.db")
@@ -164,7 +118,6 @@ from werkzeug.exceptions import MethodNotAllowed
 
 @app.errorhandler(405)
 def handle_405(e):
-    # Se o erro 405 for em /login, responde 204 pra calar o bot. Senão mostra erro normal
     if request.path == "/login" and request.method == "POST":
         return "", 204
     return "Method Not Allowed", 405
