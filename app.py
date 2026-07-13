@@ -142,18 +142,29 @@ def init_db():
     """)
     conn.commit()
 
+    padrao = [
+        ("Essenciais", 50),
+        ("Ativos", 25),
+        ("Estabilidade", 15),
+        ("Lazer", 10),
+    ]
+
     categorias = conn.execute("SELECT COUNT(*) AS cnt FROM categories").fetchone()["cnt"]
     if categorias == 0:
         conn.executemany(
-            "INSERT INTO categories (nome, percentual, saldo) VALUES (?, ?, ?)",
-            [
-                ("Ativos", 25, 0),
-                ("Essenciais", 50, 0),
-                ("Estabilidade", 15, 0),
-                ("Reconpensas", 10, 0),
-            ],
+            "INSERT INTO categories (nome, percentual, saldo) VALUES (?, ?, 0)",
+            padrao,
         )
-        conn.commit()
+    else:
+        # Atualiza nomes/percentuais das 4 primeiras categorias (mantendo saldo)
+        existentes = conn.execute("SELECT id FROM categories ORDER BY id LIMIT 4").fetchall()
+        for i, cat in enumerate(existentes):
+            if i < len(padrao):
+                conn.execute(
+                    "UPDATE categories SET nome = ?, percentual = ? WHERE id = ?",
+                    (padrao[i][0], padrao[i][1], cat["id"]),
+                )
+    conn.commit()
     conn.close()
 
 
@@ -196,7 +207,6 @@ def transacao():
     valor = -abs(valor) if tipo == "gasto" else abs(valor)
 
     conn = get_db()
-    # Garante que a categoria existe
     cat = conn.execute("SELECT id FROM categories WHERE id = ?", (categoria_id,)).fetchone()
     if not cat:
         conn.close()
