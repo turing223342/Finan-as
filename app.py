@@ -1,13 +1,12 @@
 import os
 import sqlite3
 from datetime import datetime
-
-from flask import Flask, request, redirect, url_for, render_template_string
+from flask import Flask, request, redirect, url_for, render_template_string, flash, g
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "troca-essa-chave-em-producao")
 
-# Caminho do banco: usa /var/data se existir (disco persistente do Render),
-# caso contrário salva no diretório do projeto.
+# Banco: usa /var/data no Render, ou pasta local
 DB_DIR = "/var/data" if os.path.isdir("/var/data") else os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(DB_DIR, "financas.db")
 
@@ -17,45 +16,62 @@ HTML = """
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Organizador Financeiro</title>
+  <title>Organizador Financeiro 50/25/15/10</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 16px; }
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 24px auto; padding: 0 16px; background: #f5f5f5; }
+   .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    h1 { color: #1b5e20; }
     table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-    th, td { padding: 8px; border: 1px solid #ddd; text-align: left; }
-    .negativo { color: #b71c1c; font-weight: bold; }
-    .positivo { color: #1b5e20; }
-    .badge { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 0.9rem; }
-    .badge-declinio { background: #fdecea; color: #b71c1c; }
-    .badge-ok { background: #e8f5e9; color: #1b5e20; }
-    form { margin-top: 24px; }
-    label { display: block; margin-top: 10px; }
-    input, select, button { width: 100%; padding: 10px; margin-top: 6px; box-sizing: border-box; }
-    button { background: #1b5e20; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
-    button:hover { background: #164d1a; }
+    th, td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; }
+   .negativo { color: #c62828; font-weight: bold; }
+   .positivo { color: #2e7d32; }
+   .badge { padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold; }
+   .badge-ruim { background: #ffebee; color: #c62828; }
+   .badge-ok { background: #e8f5e9; color: #2e7d32; }
+   .badge-alerta { background: #fff8e1; color: #f57f17; }
+    input, select, button { width: 100%; padding: 10px; margin-top: 6px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+    button { background: #1b5e20; color: #fff; border: 0; cursor: pointer; font-weight: bold; }
+    button:hover { background: #114214; }
+   .flash { padding: 12px; border-radius: 4px; margin-bottom: 15px; }
+   .flash-success { background: #e8f5e9; color: #2e7d32; }
+   .flash-error { background: #ffebee; color: #c62828; }
+   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media(max-width: 700px){.grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
-  <h1>Organizador Financeiro</h1>
+  <h1>💰 Organizador Financeiro</h1>
 
-  <section>
-    <h2>Saldo por categoria</h2>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="card">
+    <h2>Resumo Geral</h2>
+    <p><b>Entradas:</b> <span class="positivo">R$ {{ '%.2f'|format(total_entrada) }}</span></p>
+    <p><b>Gastos:</b> <span class="negativo">R$ {{ '%.2f'|format(total_gasto) }}</span></p>
+    <p><b>Saldo:</b> <span class="{{ 'negativo' if saldo_geral < 0 else 'positivo' }}">R$ {{ '%.2f'|format(saldo_geral) }}</span></p>
+  </div>
+
+  <div class="card">
+    <h2>Saldo por Categoria - Regra 50/25/15/10</h2>
     <table>
-      <tr>
-        <th>Categoria</th>
-        <th>%</th>
-        <th>Saldo</th>
-        <th>Status</th>
-      </tr>
+      <tr><th>Categoria</th><th>%</th><th>Meta do Mês</th><th>Gasto Atual</th><th>Status</th></tr>
       {% for cat in categories %}
       <tr>
         <td>{{ cat["nome"] }}</td>
         <td>{{ cat["percentual"] }}%</td>
-        <td class="{{ 'negativo' if cat['saldo'] < 0 else 'positivo' }}">
-          R$ {{ '%.2f'|format(cat['saldo']) }}
-        </td>
+        <td>R$ {{ '%.2f'|format(meta_total * cat["percentual"] / 100) }}</td>
+        <td class="{{ 'negativo' if cat['gasto'] > 0 else '' }}">R$ {{ '%.2f'|format(cat['gasto']) }}</td>
         <td>
-          {% if cat['saldo'] < 0 %}
-            <span class="badge badge-declinio">Negativo</span>
+          {% if cat['gasto'] > meta_total * cat["percentual"] / 100 %}
+            <span class="badge badge-ruim">Estourou</span>
+          {% elif cat['gasto'] > meta_total * cat["percentual"] / 100 * 0.8 %}
+            <span class="badge badge-alerta">Atenção</span>
           {% else %}
             <span class="badge badge-ok">OK</span>
           {% endif %}
@@ -63,174 +79,117 @@ HTML = """
       </tr>
       {% endfor %}
     </table>
-  </section>
+  </div>
 
-  <section>
-    <h2>Registrar entrada ou gasto</h2>
-    <form method="post" action="{{ url_for('transacao') }}">
-      <label>Tipo</label>
-      <select name="tipo" required>
-        <option value="entrada">Entrada</option>
-        <option value="gasto">Gasto</option>
-      </select>
+  <div class="grid">
+    <div class="card">
+      <h2>Nova Transação</h2>
+      <form method="post" action="{{ url_for('transacao') }}">
+        <label>Tipo</label>
+        <select name="tipo" required><option value="entrada">Entrada</option><option value="gasto">Gasto</option></select>
 
-      <label>Categoria</label>
-      <select name="categoria_id" required>
-        {% for cat in categories %}
-          <option value="{{ cat['id'] }}">{{ cat['nome'] }} ({{ cat['percentual'] }}%)</option>
+        <label>Categoria</label>
+        <select name="categoria_id" required>{% for cat in categories %}<option value="{{ cat['id'] }}">{{ cat['nome'] }}</option>{% endfor %}</select>
+
+        <label>Valor R$</label><input name="valor" type="number" step="0.01" min="0.01" required>
+
+        <label>Descrição</label><input name="descricao" type="text" placeholder="Ex: Supermercado">
+
+        <button type="submit">Salvar</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Últimas Movimentações</h2>
+      <table>
+        <tr><th>Data</th><th>Categoria</th><th>Valor</th></tr>
+        {% for tx in transactions %}
+        <tr>
+          <td>{{ tx["data"][:10] }}</td>
+          <td>{{ tx["categoria_nome"] }}</td>
+          <td class="{{ 'negativo' if tx['valor'] < 0 else 'positivo' }}">R$ {{ '%.2f'|format(tx['valor']) }}</td>
+        </tr>
         {% endfor %}
-      </select>
-
-      <label>Valor</label>
-      <input name="valor" type="number" step="0.01" min="0.01" placeholder="1500.00" required>
-
-      <label>Descrição</label>
-      <input name="descricao" type="text" placeholder="Ex: Conta de luz">
-
-      <button type="submit">Salvar</button>
-    </form>
-  </section>
-
-  <section>
-    <h2>Últimas transações</h2>
-    <table>
-      <tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Valor</th><th>Descrição</th></tr>
-      {% for tx in transactions %}
-      <tr>
-        <td>{{ tx["data"] }}</td>
-        <td>{{ tx["tipo"] }}</td>
-        <td>{{ tx["categoria_nome"] }}</td>
-        <td class="{{ 'negativo' if tx['valor'] < 0 else 'positivo' }}">
-          {{ 'R$ %.2f'|format(tx['valor']) }}
-        </td>
-        <td>{{ tx["descricao"] }}</td>
-      </tr>
-      {% endfor %}
-    </table>
-  </section>
+      </table>
+    </div>
+  </div>
 </body>
 </html>
 """
 
-
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if 'db' not in g:
+        g.db = sqlite3.connect(DB_PATH)
+        g.db.row_factory = sqlite3.Row
+    return g.db
 
+@app.teardown_appcontext
+def close_db(error):
+    db = g.pop('db', None)
+    if db is not None:
+        db.close()
 
 def init_db():
-    conn = get_db()
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS categories (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT NOT NULL,
-        percentual INTEGER NOT NULL,
-        saldo REAL NOT NULL DEFAULT 0
-    )
-    """)
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS transactions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        categoria_id INTEGER NOT NULL,
-        tipo TEXT NOT NULL,
-        valor REAL NOT NULL,
-        descricao TEXT,
-        data TEXT NOT NULL,
-        FOREIGN KEY(categoria_id) REFERENCES categories(id)
-    )
-    """)
-    conn.commit()
+    db = get_db()
+    db.execute("CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY, nome TEXT NOT NULL, percentual INTEGER NOT NULL, saldo REAL NOT NULL DEFAULT 0)")
+    db.execute("CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY, categoria_id INTEGER, tipo TEXT, valor REAL, descricao TEXT, data TEXT, FOREIGN KEY(categoria_id) REFERENCES categories(id))")
 
-    padrao = [
-        ("Essenciais", 50),
-        ("Ativos", 25),
-        ("Estabilidade", 15),
-        ("Lazer", 10),
-    ]
+    if db.execute("SELECT COUNT(*) FROM categories").fetchone()[0] == 0:
+        padrao = [("Essenciais", 50), ("Ativos", 25), ("Estabilidade", 15), ("Lazer", 10)]
+        db.executemany("INSERT INTO categories (nome, percentual) VALUES (?,?)", padrao)
+    db.commit()
 
-    categorias = conn.execute("SELECT COUNT(*) AS cnt FROM categories").fetchone()["cnt"]
-    if categorias == 0:
-        conn.executemany(
-            "INSERT INTO categories (nome, percentual, saldo) VALUES (?, ?, 0)",
-            padrao,
-        )
-    else:
-        # Atualiza nomes/percentuais das 4 primeiras categorias (mantendo saldo)
-        existentes = conn.execute("SELECT id FROM categories ORDER BY id LIMIT 4").fetchall()
-        for i, cat in enumerate(existentes):
-            if i < len(padrao):
-                conn.execute(
-                    "UPDATE categories SET nome = ?, percentual = ? WHERE id = ?",
-                    (padrao[i][0], padrao[i][1], cat["id"]),
-                )
-    conn.commit()
-    conn.close()
-
-
-# Inicializa o banco no import (funciona tanto com "python app.py"
-# quanto com gunicorn em produção).
-init_db()
-
+with app.app_context():
+    init_db()
 
 @app.route("/")
 def index():
-    conn = get_db()
-    categories = conn.execute("SELECT * FROM categories ORDER BY id").fetchall()
-    transactions = conn.execute("""
-        SELECT t.*, c.nome AS categoria_nome
-        FROM transactions t
-        JOIN categories c ON t.categoria_id = c.id
-        ORDER BY t.id DESC
-        LIMIT 10
-    """).fetchall()
-    conn.close()
-    return render_template_string(HTML, categories=categories, transactions=transactions)
+    db = get_db()
+    categories = db.execute("SELECT * FROM categories ORDER BY id").fetchall()
+    transactions = db.execute("SELECT t.*, c.nome AS categoria_nome FROM transactions t JOIN categories c ON t.categoria_id = c.id ORDER BY t.id DESC LIMIT 10").fetchall()
 
+    total_entrada = db.execute("SELECT SUM(valor) FROM transactions WHERE valor > 0").fetchone()[0] or 0
+    total_gasto = abs(db.execute("SELECT SUM(valor) FROM transactions WHERE valor < 0").fetchone()[0] or 0)
+    saldo_geral = total_entrada - total_gasto
+
+    categories_calc = []
+    for cat in categories:
+        gasto_cat = abs(db.execute("SELECT SUM(valor) FROM transactions WHERE categoria_id =? AND valor < 0", (cat["id"],)).fetchone()[0] or 0)
+        categories_calc.append({**cat, "gasto": gasto_cat})
+
+    return render_template_string(HTML, categories=categories_calc, transactions=transactions,
+                                  total_entrada=total_entrada, total_gasto=total_gasto,
+                                  saldo_geral=saldo_geral, meta_total=total_entrada)
 
 @app.route("/transacao", methods=["POST"])
 def transacao():
-    tipo = request.form.get("tipo", "").strip()
-    if tipo not in ("entrada", "gasto"):
-        return "Tipo inválido", 400
-
     try:
+        tipo = request.form["tipo"]
         categoria_id = int(request.form["categoria_id"])
         valor = float(request.form["valor"])
-    except (KeyError, ValueError):
-        return "Dados inválidos", 400
+        descricao = request.form.get("descricao", "")
+    except:
+        flash("Erro: Dados inválidos", "error")
+        return redirect(url_for("index"))
 
     if valor <= 0:
-        return "Valor deve ser maior que zero", 400
+        flash("Erro: Valor deve ser maior que zero", "error")
+        return redirect(url_for("index"))
 
-    descricao = request.form.get("descricao", "").strip()
-    valor = -abs(valor) if tipo == "gasto" else abs(valor)
+    valor_db = -abs(valor) if tipo == "gasto" else abs(valor)
+    data = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    conn = get_db()
-    cat = conn.execute("SELECT id FROM categories WHERE id = ?", (categoria_id,)).fetchone()
-    if not cat:
-        conn.close()
-        return "Categoria não encontrada", 400
-
-    conn.execute(
-        "INSERT INTO transactions (categoria_id, tipo, valor, descricao, data) VALUES (?, ?, ?, ?, ?)",
-        (categoria_id, tipo, valor, descricao, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-    )
-    conn.execute(
-        "UPDATE categories SET saldo = saldo + ? WHERE id = ?",
-        (valor, categoria_id),
-    )
-    conn.commit()
-    conn.close()
+    db = get_db()
+    db.execute("INSERT INTO transactions (categoria_id, tipo, valor, descricao, data) VALUES (?,?,?,?,?)",
+               (categoria_id, tipo, valor_db, descricao, data))
+    db.execute("UPDATE categories SET saldo = saldo +? WHERE id =?", (valor_db, categoria_id))
+    db.commit()
+    flash("Transação salva!", "success")
     return redirect(url_for("index"))
-
 
 @app.route("/health")
 def health():
-    return {"status": "ok"}, 200
-
+    return {"status": "ok"}
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    debug = os.environ.get("FLASK_DEBUG", "0") == "1"
-    app.run(host="0.0.0.0", port=port, debug=debug)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
