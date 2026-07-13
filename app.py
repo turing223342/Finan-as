@@ -27,7 +27,7 @@ body{font-family:'Segoe UI',Arial;background:linear-gradient(135deg,#667eea 0%,#
 .progresso{background:#eee;height:12px;border-radius:10px;overflow:hidden;margin:15px 0}
 .barra{background:linear-gradient(90deg,#667eea,#764ba2);height:100%;transition:width 0.3s}
 .alert{color:#e74c3c;font-weight:bold}
-.btn{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:12px 25px;border:none;border-radius:8px;cursor:pointer;font-weight:bold;margin:5px}
+.btn{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:12px 25px;border:none;border-radius:8px;cursor:pointer;font-weight:bold;margin:5px;text-decoration:none;display:inline-block}
 .btn:hover{opacity:0.9}
 input{padding:10px;border:2px solid #ddd;border-radius:8px;width:120px;margin:5px}
 .flash{padding:15px;background:#d4edda;color:#155724;border-radius:8px;margin-bottom:15px;text-align:center}
@@ -49,6 +49,7 @@ input{padding:10px;border:2px solid #ddd;border-radius:8px;width:120px;margin:5p
 <form method="POST" action="/salario">
 <input type="text" name="salario" placeholder="Ex: 5000,00" required>
 <button class="btn" type="submit">Definir Salário</button>
+<a href="/zerar" class="btn" style="background:#e74c3c">🔄 Zerar Mês</a>
 </form>
 </div>
 
@@ -102,6 +103,7 @@ def index():
         gasto = conn.execute("SELECT SUM(valor) FROM gastos WHERE categoria=?", (nome,)).fetchone()[0] or 0
         saldo = definido - gasto
         percentual_gasto = int((gasto/definido*100)) if definido>0 else 0
+        if percentual_gasto > 100: percentual_gasto = 100
         categorias.append({'nome': nome, 'percentual': perc, 'definido': definido, 'gasto': gasto, 'saldo': saldo, 'estourou': saldo<0, 'percentual_gasto': percentual_gasto})
     conn.close()
     return render_template_string(HTML, categorias=categorias, salario_total=salario_total, total_gasto=total_gasto)
@@ -115,16 +117,3 @@ def salario():
     conn.commit(); conn.close()
     flash(f"Salário R$ {salario:.2f} definido! Mês zerado.")
     return redirect(url_for("index"))
-
-@app.route("/gasto", methods=["POST"])
-def gasto():
-    valor = converter_valor(request.form["valor"])
-    conn = sqlite3.connect(DATABASE)
-    conn.execute("INSERT INTO gastos (categoria, valor, descricao, data) VALUES (?,?,?,?)",
-        (request.form["categoria"], valor, request.form.get("descricao", ""), datetime.now().strftime("%d/%m %H:%M")))
-    conn.commit(); conn.close()
-    flash("Gasto lançado com sucesso!")
-    return redirect(url_for("index"))
-
-if __name__ == '__main__':
-    app.run()
