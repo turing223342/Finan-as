@@ -2,31 +2,26 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Controle Ajuda de Custo</title>
+<title>Organizador Financeiro 50/25/15/10</title>
 <style>
-    *{margin:0;padding:0;box-sizing:border-box;font-family: 'Segoe UI', sans-serif;}
-    body{background:#f4f6f9;color:#333;padding:20px;}
-    .container{max-width:700px;margin:auto;background:#fff;padding:25px;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);}
-    h1{text-align:center;color:#2c3e50;margin-bottom:20px;}
-    .card{background:#ecf0f1;padding:15px;border-radius:8px;margin-bottom:20px;}
-    .saldo{font-size:1.5em;font-weight:bold;color:#27ae60;text-align:center;}
-    .gasto{color:#c0392b;}
-    form{display:flex;flex-direction:column;gap:12px;}
-    input, select, button{padding:12px;border:1px solid #ccc;border-radius:6px;font-size:16px;}
-    button{background:#3498db;color:#fff;border:none;cursor:pointer;font-weight:bold;transition:0.3s;}
-    button:hover{background:#2980b9;}
-    .flash{padding:10px;border-radius:6px;margin-bottom:15px;text-align:center;}
-    .flash.success{background:#d4edda;color:#155724;}
-    .flash.error{background:#f8d7da;color:#721c24;}
+    body{font-family:Arial;background:#f4f6f9;padding:20px;}
+    .container{max-width:800px;margin:auto;background:#fff;padding:25px;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);}
+    h1{color:#2c3e50;text-align:center;}
+    .card{background:#ecf0f1;padding:15px;border-radius:8px;margin:15px 0;}
+    input, button{padding:10px;border-radius:6px;border:1px solid #ccc;width:100%;margin:5px 0;}
+    button{background:#27ae60;color:#fff;border:none;font-weight:bold;cursor:pointer;}
+    button:hover{background:#229954;}
     table{width:100%;border-collapse:collapse;margin-top:15px;}
-    th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;}
-    th{background:#3498db;color:#fff;}
+    th{background:#3498db;color:#fff;padding:10px;}
+    td{padding:10px;border-bottom:1px solid #ddd;text-align:center;}
+    .ok{color:green;} .estourou{color:red;font-weight:bold;}
+    .flash.success{background:#d4edda;color:#155724;padding:10px;border-radius:6px;}
+    .flash.error{background:#f8d7da;color:#721c24;padding:10px;border-radius:6px;}
 </style>
 </head>
 <body>
 <div class="container">
-    <h1>💰 Controle de Ajuda de Custo</h1>
+    <h1>💰 Organizador Financeiro 50/25/15/10</h1>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
@@ -37,42 +32,43 @@
     {% endwith %}
 
     <div class="card">
-        <h3>Definir Salário do Mês</h3>
-        <p>Saldo atual: <span class="saldo">R$ {{ "%.2f"|format(saldo) }}</span> | Gasto: <span class="gasto">R$ {{ "%.2f"|format(total_gasto) }}</span></p>
+        <h3>1. Lançar Salário do Mês</h3>
+        <p>Valor do Salário/Entrada do Mês. Ex: 2700 ou 2.700,50</p>
         <form action="/lancar_salario" method="POST">
-            <input type="text" name="salario" placeholder="Ex: 2700 ou 2.700,50" required>
-            <button type="submit">Zerar e Definir Salário</button>
+            <input type="text" name="salario" placeholder="Ex: 2700,00" required>
+            <button type="submit">Dividir Automaticamente</button>
         </form>
     </div>
 
     <div class="card">
-        <h3>Lançar Gasto</h3>
+        <h3>2. Lançar Gasto</h3>
         <form action="/gasto" method="POST">
-            <select name="categoria_id" required>
+            <select name="categoria" required>
                 <option value="">Selecione a Categoria</option>
-                {% for cat in categories %}
-                <option value="{{ cat.id }}">{{ cat.nome }}</option>
-                {% endfor %}
+                <option value="Essenciais">Essenciais 50%</option>
+                <option value="Ativos">Ativos 25%</option>
+                <option value="Estabilidade">Estabilidade 15%</option>
+                <option value="Lazer">Lazer 10%</option>
             </select>
-            <input type="text" name="valor" placeholder="Valor: Ex 50,90" required>
-            <input type="text" name="descricao" placeholder="Descrição opcional">
+            <input type="text" name="valor" placeholder="Valor do gasto: Ex 2,00" required>
+            <input type="text" name="descricao" placeholder="Descrição: Ex Picolé">
             <button type="submit">Lançar Gasto</button>
         </form>
     </div>
 
     <div class="card">
-        <h3>Últimos Lançamentos</h3>
+        <h3>Saldo por Categoria</h3>
         <table>
-            <tr><th>Data</th><th>Categoria</th><th>Valor</th><th>Desc</th></tr>
-            {% for t in transactions %}
+            <tr><th>Categoria</th><th>%</th><th>Valor Definido</th><th>Gasto</th><th>Saldo Restante</th><th>Status</th></tr>
+            {% for cat in categorias %}
             <tr>
-                <td>{{ t.data[:16] }}</td>
-                <td>{{ t.categoria_nome }}</td>
-                <td>R$ {{ "%.2f"|format(t.valor) }}</td>
-                <td>{{ t.descricao }}</td>
+                <td>{{ cat.nome }}</td>
+                <td>{{ cat.percentual }}%</td>
+                <td>R$ {{ "%.2f"|format(cat.definido) }}</td>
+                <td>R$ {{ "%.2f"|format(cat.gasto) }}</td>
+                <td>R$ {{ "%.2f"|format(cat.saldo) }}</td>
+                <td class="{{ 'estourou' if cat.saldo < 0 else 'ok' }}">{{ 'Estourou' if cat.saldo < 0 else 'OK' }}</td>
             </tr>
-            {% else %}
-            <tr><td colspan="4">Nenhum gasto lançado ainda</td></tr>
             {% endfor %}
         </table>
     </div>
