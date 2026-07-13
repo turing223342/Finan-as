@@ -1,126 +1,130 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file
-from datetime import datetime
+from flask import Flask, request, redirect, url_for, render_template_string, flash
 import sqlite3
-from openpyxl import Workbook
-from werkzeug.security import generate_password_hash, check_password_hash
-import os
-import logging
+from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = "chave_super_secreta_2025"
-
-# FILTRO PRA MATAR O LOG DE /login
-class IgnoreLoginFilter(logging.Filter):
-    def filter(self, record):
-        return "/login" not in record.getMessage()
-
-logging.getLogger('werkzeug').addFilter(IgnoreLoginFilter())
-app.logger.addFilter(IgnoreLoginFilter())
-# FIM DO FILTRO
-
-DB_DIR = "/var/data" if os.path.isdir("/var/data") else os.path.dirname(os.path.abspath(__file__))
-DATABASE = os.path.join(DB_DIR, "ajuda_custo.db")
+app.secret_key = "finanas2025"
+DATABASE = 'ajuda_custo.db'
 
 CATEGORIAS = {'💊 Essenciais': 50, '📈 Ativos': 25, '🏦 Estabilidade': 15, '🎮 Lazer': 10}
 
+HTML = '''
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Finan-as V2</title>
+<style>
+body{font-family:'Segoe UI',Arial;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);margin:0;padding:20px;min-height:100vh;color:#333}
+.container{max-width:1200px;margin:0 auto}
+.header{background:white;padding:25px;border-radius:15px;margin-bottom:20px;box-shadow:0 10px 30px rgba(0,0,0,0.2);text-align:center}
+.header h1{margin:0;color:#667eea;font-size:32px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-bottom:20px}
+.card{background:white;padding:25px;border-radius:15px;box-shadow:0 10px 30px rgba(0,0,0,0.2)}
+.card h3{margin:0 0 15px 0;font-size:20px;color:#667eea}
+.saldo{font-size:28px;font-weight:bold;color:#667eea;margin:10px 0}
+.progresso{background:#eee;height:12px;border-radius:10px;overflow:hidden;margin:15px 0}
+.barra{background:linear-gradient(90deg,#667eea,#764ba2);height:100%;transition:width 0.3s}
+.alert{color:#e74c3c;font-weight:bold}
+.btn{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:12px 25px;border:none;border-radius:8px;cursor:pointer;font-weight:bold;margin:5px}
+.btn:hover{opacity:0.9}
+input{padding:10px;border:2px solid #ddd;border-radius:8px;width:120px;margin:5px}
+.flash{padding:15px;background:#d4edda;color:#155724;border-radius:8px;margin-bottom:15px;text-align:center}
+.salario-box{background:white;padding:20px;border-radius:15px;margin-bottom:20px;box-shadow:0 10px 30px rgba(0,0,0,0.2)}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+<h1>📊 Finan-as V2</h1>
+<p>Saldo Total: <b>R$ {{ "%.2f"|format(salario_total - total_gasto) }}</b></p>
+</div>
+
+{% with messages = get_flashed_messages() %}
+{% if messages %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<div class="salario-box">
+<h3>💰 Lançar Salário do Mês</h3>
+<form method="POST" action="/salario">
+<input type="text" name="salario" placeholder="Ex: 5000,00" required>
+<button class="btn" type="submit">Definir Salário</button>
+</form>
+</div>
+
+<div class="cards">
+{% for cat in categorias %}
+<div class="card">
+<h3>{{ cat.nome }}</h3>
+<p><b>{{ cat.percentual }}%</b> do salário</p>
+<p>Definido: R$ {{ "%.2f"|format(cat.definido) }}</p>
+<p>Gasto: R$ {{ "%.2f"|format(cat.gasto) }}</p>
+<p class="saldo">Saldo: R$ {{ "%.2f"|format(cat.saldo) }}</p>
+{% if cat.estourou %}<p class="alert">⚠️ ESTOUROU!</p>{% endif %}
+
+<div class="progresso"><div class="barra" style="width:{{ cat.percentual_gasto }}%"></div></div>
+
+<form method="POST" action="/gasto">
+<input type="hidden" name="categoria" value="{{ cat.nome }}">
+<input type="text" name="valor" placeholder="R$ 0,00">
+<input type="text" name="descricao" placeholder="Descrição">
+<button class="btn" type="submit">Lançar</button>
+</form>
+</div>
+{% endfor %}
+</div>
+</div>
+</body>
+</html>
+'''
+
 def init_db():
-    db = sqlite3.connect(DATABASE)
-    db.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, usuario TEXT UNIQUE, senha TEXT)')
-    db.execute('CREATE TABLE IF NOT EXISTS settings (user_id INT, chave TEXT, valor REAL, PRIMARY KEY(user_id,chave))')
-    db.execute('CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY, user_id INT, categoria TEXT, valor REAL, descricao TEXT, data TEXT)')
-    db.execute('CREATE TABLE IF NOT EXISTS metas (id INTEGER PRIMARY KEY, user_id INT, categoria TEXT, valor_meta REAL)')
-    if db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
-        senha_hash = generate_password_hash("1234")
-        db.execute("INSERT INTO users (usuario, senha) VALUES (?,?)", ("admin", senha_hash))
-    db.commit(); db.close()
+    conn = sqlite3.connect(DATABASE)
+    conn.execute('CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY, categoria TEXT, valor REAL, descricao TEXT, data TEXT)')
+    conn.execute('CREATE TABLE IF NOT EXISTS config (chave TEXT PRIMARY KEY, valor REAL)')
+    conn.commit(); conn.close()
 
 def converter_valor(v):
     try: return float(str(v).strip().replace('.', '').replace(',', '.'))
     except: return 0
 
-@app.route("/login", methods=["GET","POST"])
-def login():
-    if request.method == "POST":
-        db = sqlite3.connect(DATABASE)
-        user = db.execute("SELECT * FROM users WHERE usuario=?", (request.form["usuario"],)).fetchone()
-        if user and check_password_hash(user[2], request.form["senha"]):
-            session["user_id"] = user[0]; db.close()
-            return redirect(url_for("index"))
-        flash("Usuário ou senha inválidos", "error"); db.close()
-    return render_template("login.html")
-
-@app.route("/logout")
-def logout(): session.clear(); return redirect(url_for("login"))
-
 @app.route("/")
 def index():
-    if "user_id" not in session: return redirect(url_for("login"))
-    init_db(); user_id = session["user_id"]
-    db = sqlite3.connect(DATABASE); db.row_factory = sqlite3.Row
-    salario_total = db.execute("SELECT valor FROM settings WHERE user_id=? AND chave='salario_total'", (user_id,)).fetchone()
-    salario_total = salario_total[0] if salario_total else 0
-    total_gasto = db.execute("SELECT SUM(valor) FROM gastos WHERE user_id=?", (user_id,)).fetchone()[0] or 0
-    historico = db.execute("SELECT * FROM gastos WHERE user_id=? ORDER BY data DESC LIMIT 10", (user_id,)).fetchall()
+    init_db()
+    conn = sqlite3.connect(DATABASE)
+    salario = conn.execute("SELECT valor FROM config WHERE chave='salario'").fetchone()
+    salario_total = salario[0] if salario else 0
+    total_gasto = conn.execute("SELECT SUM(valor) FROM gastos").fetchone()[0] or 0
+
     categorias = []
     for nome, perc in CATEGORIAS.items():
         definido = salario_total * (perc / 100)
-        gasto = db.execute("SELECT SUM(valor) FROM gastos WHERE user_id=? AND categoria=?", (user_id,nome)).fetchone()[0] or 0
+        gasto = conn.execute("SELECT SUM(valor) FROM gastos WHERE categoria=?", (nome,)).fetchone()[0] or 0
         saldo = definido - gasto
-        meta = db.execute("SELECT valor_meta FROM metas WHERE user_id=? AND categoria=?", (user_id,nome)).fetchone()
-        meta_valor = meta[0] if meta else 0
-        progresso_meta = int((saldo/meta_valor*100)) if meta_valor>0 else 0
-        categorias.append({'nome': nome, 'percentual': perc, 'definido': definido, 'gasto': gasto, 'saldo': saldo, 'estourou': saldo<0, 'meta': meta_valor, 'progresso_meta': progresso_meta})
-    db.close()
-    return render_template("index.html", categorias=categorias, salario_total=salario_total, total_gasto=total_gasto, historico=historico)
+        percentual_gasto = int((gasto/definido*100)) if definido>0 else 0
+        categorias.append({'nome': nome, 'percentual': perc, 'definido': definido, 'gasto': gasto, 'saldo': saldo, 'estourou': saldo<0, 'percentual_gasto': percentual_gasto})
+    conn.close()
+    return render_template_string(HTML, categorias=categorias, salario_total=salario_total, total_gasto=total_gasto)
 
-@app.route("/lancar_salario", methods=["POST"])
-def lancar_salario():
-    if "user_id" not in session: return redirect(url_for("login"))
+@app.route("/salario", methods=["POST"])
+def salario():
     salario = converter_valor(request.form["salario"])
-    db = sqlite3.connect(DATABASE)
-    db.execute("INSERT OR REPLACE INTO settings (user_id, chave, valor) VALUES (?,?,?)", (session["user_id"],'salario_total',salario))
-    db.execute("DELETE FROM gastos WHERE user_id=?", (session["user_id"],))
-    db.commit(); db.close()
-    flash(f"Salário R$ {salario:.2f} definido!", "success")
+    conn = sqlite3.connect(DATABASE)
+    conn.execute("INSERT OR REPLACE INTO config (chave, valor) VALUES ('salario',?)", (salario,))
+    conn.execute("DELETE FROM gastos")
+    conn.commit(); conn.close()
+    flash(f"Salário R$ {salario:.2f} definido! Mês zerado.")
     return redirect(url_for("index"))
 
 @app.route("/gasto", methods=["POST"])
 def gasto():
-    if "user_id" not in session: return redirect(url_for("login"))
     valor = converter_valor(request.form["valor"])
-    db = sqlite3.connect(DATABASE)
-    db.execute("INSERT INTO gastos (user_id, categoria, valor, descricao, data) VALUES (?,?,?,?,?)", (session["user_id"], request.form["categoria"], valor, request.form.get("descricao", ""), datetime.now().strftime("%d/%m %H:%M")))
-    db.commit(); db.close()
-    flash("Gasto lançado!", "success")
+    conn = sqlite3.connect(DATABASE)
+    conn.execute("INSERT INTO gastos (categoria, valor, descricao, data) VALUES (?,?,?,?)",
+        (request.form["categoria"], valor, request.form.get("descricao", ""), datetime.now().strftime("%d/%m %H:%M")))
+    conn.commit(); conn.close()
+    flash("Gasto lançado com sucesso!")
     return redirect(url_for("index"))
 
-@app.route("/meta", methods=["POST"])
-def meta():
-    if "user_id" not in session: return redirect(url_for("login"))
-    db = sqlite3.connect(DATABASE)
-    db.execute("INSERT OR REPLACE INTO metas (user_id, categoria, valor_meta) VALUES (?,?,?)", (session["user_id"], request.form["categoria"], converter_valor(request.form["valor_meta"])))
-    db.commit(); db.close()
-    flash("Meta salva!", "success")
-    return redirect(url_for("index"))
-
-@app.route("/exportar")
-def exportar():
-    if "user_id" not in session: return redirect(url_for("login"))
-    db = sqlite3.connect(DATABASE)
-    gastos = db.execute("SELECT data,categoria,descricao,valor FROM gastos WHERE user_id=?", (session["user_id"],)).fetchall()
-    wb = Workbook(); ws = wb.active; ws.title = "Gastos"
-    ws.append(["Data","Categoria","Descrição","Valor"])
-    for g in gastos: ws.append(list(g))
-    arquivo = os.path.join(DB_DIR, "gastos.xlsx"); wb.save(arquivo)
-    return send_file(arquivo, as_attachment=True)
-
-from werkzeug.exceptions import MethodNotAllowed
-
-@app.errorhandler(405)
-def handle_405(e):
-    if request.path == "/login" and request.method == "POST":
-        return "", 204
-    return "Method Not Allowed", 405
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+if __name__ == '__main__':
+    app.run()
