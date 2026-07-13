@@ -104,14 +104,20 @@ def exportar():
     arquivo = os.path.join(DB_DIR, "gastos.xlsx"); wb.save(arquivo)
     return send_file(arquivo, as_attachment=True)
 
-@app.route("/zerar_mes")
-def zerar_mes():
-    if "user_id" not in session: return redirect(url_for("login"))
-    db = sqlite3.connect(DATABASE)
-    db.execute("UPDATE settings SET valor=0 WHERE user_id=? AND chave='salario_total'", (session["user_id"],))
-    db.execute("DELETE FROM gastos WHERE user_id=?", (session["user_id"],))
-    db.commit(); db.close()
-    flash("Mês zerado!", "success")
+@app.route("/login", methods=["GET", "POST", "HEAD"])
+def login():
+    if request.method == "POST":
+        return "", 204
+    flash("Esse app não tem login. Use direto na página inicial.", "error")
     return redirect(url_for("index"))
 
-if __name__ == '__main__': app.run(debug=False)
+from werkzeug.exceptions import MethodNotAllowed
+
+@app.errorhandler(405)
+def handle_405(e):
+    if request.path == "/login":
+        return "", 204
+    return "Method Not Allowed", 405
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
