@@ -1,97 +1,41 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Meu Orçamento 50/25/15/10</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-    :root{--roxo:#5F2EEA;--verde:#00D4AA;--amarelo:#FFB800;--azul:#007BFF;--vermelho:#FF4B4B;--fundo:#F8F9FA;--card:#FFFFFF;}
-    body{font-family:'Segoe UI',sans-serif;background:var(--fundo);margin:0;color:#333;}
-   .header{background:var(--roxo);color:#fff;padding:20px;text-align:center;display:flex;justify-content:space-between;align-items:center;}
-   .header a{background:#fff;color:var(--roxo);padding:8px 12px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:12px;}
-   .container{max-width:900px;margin:-20px auto 20px;padding:15px;}
-   .card{background:var(--card);padding:20px;border-radius:16px;margin:15px 0;box-shadow:0 4px 12px rgba(0,0,0,0.05);}
-   .saldo-geral{display:flex;justify-content:space-between;}
-   .saldo-geral h2{margin:5px 0;font-size:28px;}
-    input,select,button{padding:14px;border-radius:12px;border:1px solid #ddd;width:100%;margin:8px 0;font-size:16px;box-sizing:border-box;}
-    button{background:var(--roxo);color:#fff;border:none;font-weight:bold;cursor:pointer;}
-   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;}
-   .cat-card{padding:15px;border-radius:12px;color:#fff; transition:0.3s;}
-   .cat-card.estourou{animation:piscar 1s infinite; border:3px solid #000;}
-    @keyframes piscar{0%{opacity:1}50%{opacity:0.5}100%{opacity:1}}
-   .Essenciais{background:var(--verde);}.Ativos{background:var(--azul);}.Estabilidade{background:var(--amarelo);color:#333;}.Lazer{background:var(--vermelho);}
-   .progresso{height:8px;background:rgba(0,0,0,0.1);border-radius:10px;margin-top:8px;}
-   .progresso div{height:100%;background:#fff;border-radius:10px;}
-   .flash{padding:12px;border-radius:10px;margin-bottom:15px;text-align:center;}
-   .success{background:#d1fae5;color:#065f46;}.error{background:#fee2e2;color:#991b1b;}
-    table{width:100%;font-size:14px;} td{padding:8px;border-bottom:1px solid #eee;}
-</style>
-</head>
+<!DOCTYPE html><html lang="pt-br"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meu Orçamento 2.0</title><script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>:root{--roxo:#5F2EEA;--verde:#00D4AA;--amarelo:#FFB800;--azul:#007BFF;--vermelho:#FF4B4B;--fundo:#F8F9FA;--card:#FFFFFF;}
+body.dark{--fundo:#1a1a1a;--card:#2c2c2c;color:#fff;}
+body{font-family:'Segoe UI';background:var(--fundo);margin:0;color:#333;transition:0.3s;}
+.header{background:var(--roxo);color:#fff;padding:15px;display:flex;justify-content:space-between;align-items:center;}
+.header a{color:#fff;text-decoration:none;margin-left:15px;font-weight:bold;}
+.container{max-width:900px;margin:20px auto;padding:15px;}
+.card{background:var(--card);padding:20px;border-radius:16px;margin:15px 0;box-shadow:0 4px 12px rgba(0,0,0,0.05);}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;}
+.cat-card{padding:15px;border-radius:12px;color:#fff;}
+.Essenciais{background:var(--verde);}.Ativos{background:var(--azul);}.Estabilidade{background:var(--amarelo);color:#333;}.Lazer{background:var(--vermelho);}
+input,select,button{padding:12px;border-radius:10px;border:1px solid #ccc;width:100%;margin:5px 0;box-sizing:border-box;}
+button{background:var(--roxo);color:#fff;border:none;font-weight:bold;cursor:pointer;}</style></head>
 <body>
-    <div class="header">
-        <h1>💰 Meu Orçamento</h1>
-        <a href="/zerar_mes">Zerar Mês</a>
-    </div>
-    <div class="container">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endif %}
-    {% endwith %}
+<div class="header"><h2>💰 Meu Orçamento 2.0</h2>
+<div><a href="/exportar">📥 Exportar</a> <button onclick="document.body.classList.toggle('dark')">🌙</button> <a href="/logout">Sair</a></div></div>
+<div class="container">
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for c,m in messages %}<div style="padding:10px;background:#d1fae5;border-radius:8px;">{{ m }}</div>{% endfor %}{% endif %}{% endwith %}
 
-    <div class="card">
-        <div class="saldo-geral">
-            <div><p>Salário do Mês</p><h2>R$ {{ "%.2f"|format(salario_total) }}</h2></div>
-            <div><p>Total Gasto</p><h2>R$ {{ "%.2f"|format(total_gasto) }}</h2></div>
-        </div>
-        <canvas id="graficoPizza" style="margin-top:15px;"></canvas>
-    </div>
+<div class="card"><h3>Saldo do Mês: R$ {{ "%.2f"|format(salario_total) }} | Gasto: R$ {{ "%.2f"|format(total_gasto) }}</h3><canvas id="graficoPizza"></canvas></div>
 
-    <div class="card">
-        <h3>1. Definir Salário</h3>
-        <form action="/lancar_salario" method="POST">
-            <input type="text" name="salario" placeholder="Ex: 2700,00" required>
-            <button type="submit">Dividir Automaticamente</button>
-        </form>
-    </div>
+<div class="card"><h3>Definir Salário</h3><form action="/lancar_salario" method="POST"><input name="salario" placeholder="2700,00"><button>Dividir</button></form></div>
 
-    <div class="card">
-        <h3>2. Lançar Gasto</h3>
-        <form action="/gasto" method="POST">
-            <select name="categoria" required>
-                <option value="">Selecione a Categoria</option>
-                {% for cat in categorias %}<option value="{{ cat.nome }}">{{ cat.nome }}</option>{% endfor %}
-            </select>
-            <input type="text" name="valor" placeholder="Valor: Ex 2,00" required>
-            <input type="text" name="descricao" placeholder="Descrição: Ex Picolé">
-            <button type="submit">Lançar Gasto</button>
-        </form>
-    </div>
-    
-    <h3>Saldo por Categoria</h3>
-    <div class="grid">
-        {% for cat in categorias %}
-        <div class="card cat-card {{ cat.nome.split(' ')[1] }} {{ 'estourou' if cat.estourou else '' }}">
-            <h4>{{ cat.nome }} {{ cat.percentual }}%</h4>
-            <h3>R$ {{ "%.2f"|format(cat.saldo) }}</h3>
-            <p style="font-size:12px;margin:0;">Gasto: R$ {{ "%.2f"|format(cat.gasto) }} de R$ {{ "%.2f"|format(cat.definido) }}</p>
-            <div class="progresso"><div style="width: {{ 100 - (cat.saldo/cat.definido*100 if cat.definido>0 else 100) }}%"></div></div>
-        </div>
-        {% endfor %}
-    </div>
+<div class="card"><h3>Lançar Gasto</h3><form action="/gasto" method="POST">
+<select name="categoria" required>{% for cat in categorias %}<option>{{ cat.nome }}</option>{% endfor %}</select>
+<input name="valor" placeholder="Valor: 2,00"><input name="descricao" placeholder="Descrição"><button>Lançar</button></form></div>
 
-    <div class="card">
-        <h3>3. Últimos Gastos</h3>
-        <table>
-        {% for g in historico %}
-            <tr><td>{{ g.data }}</td><td>{{ g.categoria }}</td><td>{{ g.descricao }}</td><td><b>R$ {{ "%.2f"|format(g.valor) }}</b></td></tr>
-        {% else %}
-            <tr><td colspan="4">Nenhum gasto lançado ainda</td></tr>
-        {% endfor %}
-        </table>
-    </div>
-    </div>
-<script>
-const ctx = document.getElementById('graficoPizza');
-new Chart(ctx, {type:'doughnut',data:{labels:[{% for cat in categorias %}'{{ cat.nome }}',{% endfor %}],datasets:[{data:[{% for cat in categorias %}{{ cat.gasto }},{% endfor %}],backgroundColor:['#00D4AA','#007BFF','#FFB800','#FF4B4B']}]},options:{plugins:{legend:{position:'bottom'}}}});
-</script>
-</body>
-</html>
+<h3>Categorias + Metas</h3><div class="grid">{% for cat in categorias %}
+<div class="card cat-card {{ cat.nome.split(' ')[1] }}">
+<h4>{{ cat.nome }} {{ cat.percentual }}%</h4><h2>R$ {{ "%.2f"|format(cat.saldo) }}</h2>
+<p>Gasto: R$ {{ "%.2f"|format(cat.gasto) }}</p>
+<form action="/meta" method="POST" style="margin-top:10px;"><input type="hidden" name="categoria" value="{{ cat.nome }}">
+<input name="valor_meta" placeholder="Meta: Ex 500" value="{{ cat.meta if cat.meta>0 else ''}}"><button>Salvar Meta</button></form>
+{% if cat.meta>0 %}<p style="font-size:12px;">Meta: {{ cat.progresso_meta }}%</p>{% endif %}
+</div>{% endfor %}</div>
+
+<div class="card"><h3>Últimos Gastos</h3><table width="100%">{% for g in historico %}<tr><td>{{ g.data }}</td><td>{{ g.categoria }}</td><td>R$ {{ "%.2f"|format(g.valor) }}</td></tr>{% endfor %}</table></div>
+</div>
+<script>new Chart(document.getElementById('graficoPizza'),{type:'doughnut',data:{labels:[{% for cat in categorias %}'{{ cat.nome }}',{% endfor %}],datasets:[{data:[{% for cat in categorias %}{{ cat.gasto }},{% endfor %}],backgroundColor:['#00D4AA','#007BFF','#FFB800','#FF4B4B']}]}});</script>
+</body></html>
