@@ -1,41 +1,42 @@
-<!DOCTYPE html><html lang="pt-br"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Meu Orçamento 2.0</title><script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>:root{--roxo:#5F2EEA;--verde:#00D4AA;--amarelo:#FFB800;--azul:#007BFF;--vermelho:#FF4B4B;--fundo:#F8F9FA;--card:#FFFFFF;}
-body.dark{--fundo:#1a1a1a;--card:#2c2c2c;color:#fff;}
-body{font-family:'Segoe UI';background:var(--fundo);margin:0;color:#333;transition:0.3s;}
-.header{background:var(--roxo);color:#fff;padding:15px;display:flex;justify-content:space-between;align-items:center;}
-.header a{color:#fff;text-decoration:none;margin-left:15px;font-weight:bold;}
-.container{max-width:900px;margin:20px auto;padding:15px;}
-.card{background:var(--card);padding:20px;border-radius:16px;margin:15px 0;box-shadow:0 4px 12px rgba(0,0,0,0.05);}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;}
-.cat-card{padding:15px;border-radius:12px;color:#fff;}
-.Essenciais{background:var(--verde);}.Ativos{background:var(--azul);}.Estabilidade{background:var(--amarelo);color:#333;}.Lazer{background:var(--vermelho);}
-input,select,button{padding:12px;border-radius:10px;border:1px solid #ccc;width:100%;margin:5px 0;box-sizing:border-box;}
-button{background:var(--roxo);color:#fff;border:none;font-weight:bold;cursor:pointer;}</style></head>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Finan-as V2</title>
+<style>
+body{font-family:Arial;background:#f5f5f5;margin:0;padding:20px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:15px}
+.card{background:white;padding:20px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1)}
+.card h3{margin:0 0 10px 0}
+.btn{background:#667eea;color:white;padding:10px 20px;border:none;border-radius:5px;cursor:pointer;text-decoration:none;display:inline-block}
+.alert{color:red;font-weight:bold}
+</style>
+</head>
 <body>
-<div class="header"><h2>💰 Meu Orçamento 2.0</h2>
-<div><a href="/exportar">📥 Exportar</a> <button onclick="document.body.classList.toggle('dark')">🌙</button> <a href="/logout">Sair</a></div></div>
-<div class="container">
-{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for c,m in messages %}<div style="padding:10px;background:#d1fae5;border-radius:8px;">{{ m }}</div>{% endfor %}{% endif %}{% endwith %}
-
-<div class="card"><h3>Saldo do Mês: R$ {{ "%.2f"|format(salario_total) }} | Gasto: R$ {{ "%.2f"|format(total_gasto) }}</h3><canvas id="graficoPizza"></canvas></div>
-
-<div class="card"><h3>Definir Salário</h3><form action="/lancar_salario" method="POST"><input name="salario" placeholder="2700,00"><button>Dividir</button></form></div>
-
-<div class="card"><h3>Lançar Gasto</h3><form action="/gasto" method="POST">
-<select name="categoria" required>{% for cat in categorias %}<option>{{ cat.nome }}</option>{% endfor %}</select>
-<input name="valor" placeholder="Valor: 2,00"><input name="descricao" placeholder="Descrição"><button>Lançar</button></form></div>
-
-<h3>Categorias + Metas</h3><div class="grid">{% for cat in categorias %}
-<div class="card cat-card {{ cat.nome.split(' ')[1] }}">
-<h4>{{ cat.nome }} {{ cat.percentual }}%</h4><h2>R$ {{ "%.2f"|format(cat.saldo) }}</h2>
-<p>Gasto: R$ {{ "%.2f"|format(cat.gasto) }}</p>
-<form action="/meta" method="POST" style="margin-top:10px;"><input type="hidden" name="categoria" value="{{ cat.nome }}">
-<input name="valor_meta" placeholder="Meta: Ex 500" value="{{ cat.meta if cat.meta>0 else ''}}"><button>Salvar Meta</button></form>
-{% if cat.meta>0 %}<p style="font-size:12px;">Meta: {{ cat.progresso_meta }}%</p>{% endif %}
-</div>{% endfor %}</div>
-
-<div class="card"><h3>Últimos Gastos</h3><table width="100%">{% for g in historico %}<tr><td>{{ g.data }}</td><td>{{ g.categoria }}</td><td>R$ {{ "%.2f"|format(g.valor) }}</td></tr>{% endfor %}</table></div>
+<div class="header">
+<h1>Finan-as V2</h1>
+<a href="/logout" class="btn">Sair</a>
 </div>
-<script>new Chart(document.getElementById('graficoPizza'),{type:'doughnut',data:{labels:[{% for cat in categorias %}'{{ cat.nome }}',{% endfor %}],datasets:[{data:[{% for cat in categorias %}{{ cat.gasto }},{% endfor %}],backgroundColor:['#00D4AA','#007BFF','#FFB800','#FF4B4B']}]}});</script>
-</body></html>
+
+<div class="cards">
+{% for cat in categorias %}
+<div class="card">
+<h3>{{ cat.nome }}</h3>
+<p>Definido: R$ {{ "%.2f"|format(cat.definido) }}</p>
+<p>Gasto: R$ {{ "%.2f"|format(cat.gasto) }}</p>
+<p>Saldo: R$ {{ "%.2f"|format(cat.saldo) }}</p>
+{% if cat.estourou %}<p class="alert">ESTOUROU!</p>{% endif %}
+<form method="POST" action="/gasto">
+<input type="hidden" name="categoria" value="{{ cat.nome }}">
+<input type="text" name="valor" placeholder="Valor R$">
+<button type="submit">Lançar</button>
+</form>
+</div>
+{% endfor %}
+</div>
+
+<a href="/exportar" class="btn">Exportar Excel</a>
+<a href="/zerar_mes" class="btn">Zerar Mês</a>
+</body>
+</html>
