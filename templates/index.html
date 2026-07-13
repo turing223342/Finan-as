@@ -2,38 +2,65 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<title>Organizador Financeiro 50/25/15/10</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meu Orçamento 50/25/15/10</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-    body{font-family:Arial;background:#f4f6f9;padding:20px;}
-    .container{max-width:800px;margin:auto;background:#fff;padding:25px;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);}
-    h1{color:#2c3e50;text-align:center;}
-    .card{background:#ecf0f1;padding:15px;border-radius:8px;margin:15px 0;}
-    input, button{padding:10px;border-radius:6px;border:1px solid #ccc;width:100%;margin:5px 0;}
-    button{background:#27ae60;color:#fff;border:none;font-weight:bold;cursor:pointer;}
-    button:hover{background:#229954;}
-    table{width:100%;border-collapse:collapse;margin-top:15px;}
-    th{background:#3498db;color:#fff;padding:10px;}
-    td{padding:10px;border-bottom:1px solid #ddd;text-align:center;}
-    .ok{color:green;} .estourou{color:red;font-weight:bold;}
-    .flash.success{background:#d4edda;color:#155724;padding:10px;border-radius:6px;}
-    .flash.error{background:#f8d7da;color:#721c24;padding:10px;border-radius:6px;}
+    :root{
+        --roxo: #5F2EEA; --verde: #00D4AA; --amarelo: #FFB800; --azul: #007BFF; --vermelho: #FF4B4B;
+        --fundo: #F8F9FA; --card: #FFFFFF;
+    }
+    body{font-family: 'Segoe UI', sans-serif;background:var(--fundo);margin:0;padding:0;color:#333;}
+   .header{background:var(--roxo);color:#fff;padding:20px;text-align:center;}
+   .header h1{margin:0;font-size:22px;}
+   .container{max-width:900px;margin:-20px auto 20px;padding:15px;}
+   .card{background:var(--card);padding:20px;border-radius:16px;margin:15px 0;box-shadow:0 4px 12px rgba(0,0,0,0.05);}
+   .saldo-geral{display:flex;justify-content:space-between;font-size:14px;}
+   .saldo-geral h2{margin:5px 0;font-size:28px;}
+    input, select, button{padding:14px;border-radius:12px;border:1px solid #ddd;width:100%;margin:8px 0;font-size:16px;box-sizing:border-box;}
+    button{background:var(--roxo);color:#fff;border:none;font-weight:bold;cursor:pointer;transition:0.2s;}
+    button:hover{background:#4a23b8;}
+   .grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:15px;}
+   .cat-card{padding:15px;border-radius:12px;color:#fff;}
+   .cat-card h4{margin:0;font-size:14px;opacity:0.9;}
+   .cat-card h3{margin:5px 0;font-size:20px;}
+   .Essenciais{background:var(--verde);}
+   .Ativos{background:var(--azul);}
+   .Estabilidade{background:var(--amarelo); color:#333;}
+   .Lazer{background:var(--vermelho);}
+   .progresso{height:8px;background:rgba(255,255,255,0.3);border-radius:10px;margin-top:8px;}
+   .progresso div{height:100%;background:#fff;border-radius:10px;}
+   .flash{padding:12px;border-radius:10px;margin-bottom:15px;text-align:center;}
+   .success{background:#d1fae5;color:#065f46;}
+   .error{background:#fee2e2;color:#991b1b;}
 </style>
 </head>
 <body>
-<div class="container">
-    <h1>💰 Organizador Financeiro 50/25/15/10</h1>
+    <div class="header">
+        <h1>💰 Meu Orçamento</h1>
+    </div>
+    <div class="container">
 
     {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="flash {{ category }}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
+      {% if messages %}{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endif %}
     {% endwith %}
 
     <div class="card">
-        <h3>1. Lançar Salário do Mês</h3>
-        <p>Valor do Salário/Entrada do Mês. Ex: 2700 ou 2.700,50</p>
+        <div class="saldo-geral">
+            <div>
+                <p>Salário do Mês</p>
+                <h2>R$ {{ "%.2f"|format(salario_total) }}</h2>
+            </div>
+            <div>
+                <p>Total Gasto</p>
+                <h2>R$ {{ "%.2f"|format(total_gasto) }}</h2>
+            </div>
+        </div>
+        <canvas id="graficoPizza" style="margin-top:15px;"></canvas>
+    </div>
+
+    <div class="card">
+        <h3>1. Definir Salário</h3>
         <form action="/lancar_salario" method="POST">
             <input type="text" name="salario" placeholder="Ex: 2700,00" required>
             <button type="submit">Dividir Automaticamente</button>
@@ -45,33 +72,40 @@
         <form action="/gasto" method="POST">
             <select name="categoria" required>
                 <option value="">Selecione a Categoria</option>
-                <option value="Essenciais">Essenciais 50%</option>
-                <option value="Ativos">Ativos 25%</option>
-                <option value="Estabilidade">Estabilidade 15%</option>
-                <option value="Lazer">Lazer 10%</option>
+                {% for cat in categorias %}<option value="{{ cat.nome }}">{{ cat.nome }}</option>{% endfor %}
             </select>
-            <input type="text" name="valor" placeholder="Valor do gasto: Ex 2,00" required>
+            <input type="text" name="valor" placeholder="Valor: Ex 2,00" required>
             <input type="text" name="descricao" placeholder="Descrição: Ex Picolé">
             <button type="submit">Lançar Gasto</button>
         </form>
     </div>
-
-    <div class="card">
-        <h3>Saldo por Categoria</h3>
-        <table>
-            <tr><th>Categoria</th><th>%</th><th>Valor Definido</th><th>Gasto</th><th>Saldo Restante</th><th>Status</th></tr>
-            {% for cat in categorias %}
-            <tr>
-                <td>{{ cat.nome }}</td>
-                <td>{{ cat.percentual }}%</td>
-                <td>R$ {{ "%.2f"|format(cat.definido) }}</td>
-                <td>R$ {{ "%.2f"|format(cat.gasto) }}</td>
-                <td>R$ {{ "%.2f"|format(cat.saldo) }}</td>
-                <td class="{{ 'estourou' if cat.saldo < 0 else 'ok' }}">{{ 'Estourou' if cat.saldo < 0 else 'OK' }}</td>
-            </tr>
-            {% endfor %}
-        </table>
+    
+    <h3>Saldo por Categoria</h3>
+    <div class="grid">
+        {% for cat in categorias %}
+        <div class="card cat-card {{ cat.nome }}">
+            <h4>{{ cat.nome }} {{ cat.percentual }}%</h4>
+            <h3>R$ {{ "%.2f"|format(cat.saldo) }}</h3>
+            <p style="font-size:12px;margin:0;">Gasto: R$ {{ "%.2f"|format(cat.gasto) }} de R$ {{ "%.2f"|format(cat.definido) }}</p>
+            <div class="progresso"><div style="width: {{ 100 - (cat.saldo/cat.definido*100 if cat.definido>0 else 100) }}%"></div></div>
+        </div>
+        {% endfor %}
     </div>
-</div>
+
+    </div>
+<script>
+const ctx = document.getElementById('graficoPizza');
+new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+        labels: [{% for cat in categorias %}'{{ cat.nome }}',{% endfor %}],
+        datasets: [{
+            data: [{% for cat in categorias %}{{ cat.gasto }},{% endfor %}],
+            backgroundColor: ['#00D4AA', '#007BFF', '#FFB800', '#FF4B4B']
+        }]
+    },
+    options: { plugins: { legend: { position: 'bottom' } } }
+});
+</script>
 </body>
 </html>
