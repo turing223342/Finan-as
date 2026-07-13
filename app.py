@@ -147,9 +147,9 @@ def init_db():
         conn.executemany(
             "INSERT INTO categories (nome, percentual, saldo) VALUES (?, ?, ?)",
             [
-                ("Reserva de emergência", 25, 0),
-                ("Investimentos", 50, 0),
-                ("Lazer", 15, 0),
+                ("Ativos", 25, 0),
+                ("Essenciais", 50, 0),
+                ("Estabilidade", 15, 0),
                 ("Reconpensas", 10, 0),
             ],
         )
