@@ -1,0 +1,10 @@
+<!DOCTYPE html><html lang="pt-br"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login - Meu Orçamento</title>
+<style>body{font-family:'Segoe UI';background:#5F2EEA;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;}
+.card{background:#fff;padding:30px;border-radius:16px;width:320px;box-shadow:0 8px 20px rgba(0,0,0,0.2);}
+h1{text-align:center;color:#5F2EEA;}input,button{width:100%;padding:14px;margin:10px 0;border-radius:10px;border:1px solid #ddd;box-sizing:border-box;}
+button{background:#5F2EEA;color:#fff;border:none;font-weight:bold;cursor:pointer;}</style></head>
+<body><div class="card"><h1>💰 Login</h1>
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for c,m in messages %}<p style="color:red;text-align:center;">{{ m }}</p>{% endfor %}{% endif %}{% endwith %}
+<form method="POST"><input name="usuario" placeholder="Usuário: admin" required><input type="password" name="senha" placeholder="Senha: 1234" required><button>Entrar</button></form>
+<p style="text-align:center;font-size:12px;color:#888;">Padrão: admin / 1234</p></div></body></html>
