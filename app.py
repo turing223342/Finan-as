@@ -150,7 +150,7 @@ def init_db():
                 ("Reserva de emergência", 25, 0),
                 ("Investimentos", 50, 0),
                 ("Lazer", 15, 0),
-                ("Doações", 10, 0),
+                ("Reconpensas", 10, 0),
             ],
         )
         conn.commit()
