@@ -122,4 +122,95 @@ backgroundColor: ['#667eea','#764ba2','#f093fb','#f5576c']
 def init_db():
     conn = sqlite3.connect(DATABASE)
     conn.execute('CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY, categoria TEXT, valor REAL, descricao TEXT, data TEXT)')
-    conn.execute('CREATE TABLE IF NOT EXISTS config (chave TEXT
+    conn.execute('CREATE TABLE IF NOT EXISTS config (chave TEXT PRIMARY KEY, valor REAL)')
+    conn.commit(); conn.close()
+
+def converter_valor(v):
+    if not v: return 0
+    v = str(v).strip().replace('R$', '').replace(' ', '')
+    v = v.replace('.', '').replace(',', '.')
+    try: return float(v)
+    except: return 0
+
+@app.route("/")
+def index():
+    init_db()
+    conn = sqlite3.connect(DATABASE)
+    salario = conn.execute("SELECT valor FROM config WHERE chave='salario'").fetchone()
+    salario_total = salario[0] if salario else 0
+    total_gasto = conn.execute("SELECT SUM(valor) FROM gastos").fetchone()[0] or 0
+    historico = conn.execute("SELECT * FROM gastos ORDER BY id DESC").fetchall()
+    historico = [{'data':h[4],'categoria':h[1],'descricao':h[3],'valor':h[2]} for h in historico]
+
+    categorias = []
+    labels = []
+    dados = []
+    for nome, perc in CATEGORIAS.items():
+        definido = salario_total * (perc / 100)
+        gasto = conn.execute("SELECT SUM(valor) FROM gastos WHERE categoria=?", (nome,)).fetchone()[0] or 0
+        saldo = definido - gasto
+        percentual_gasto = int((gasto/definido*100)) if definido>0 else 0
+        if percentual_gasto > 100: percentual_gasto = 100
+        categorias.append({'nome': nome, 'percentual': perc, 'definido': definido, 'gasto': gasto, 'saldo': saldo, 'estourou': saldo<0, 'percentual_gasto': percentual_gasto})
+        if gasto > 0:
+            labels.append(nome)
+            dados.append(gasto)
+    conn.close()
+    return render_template_string(HTML, categorias=categorias, salario_total=salario_total, total_gasto=total_gasto, historico=historico, labels=labels, dados=dados)
+
+@app.route("/salario", methods=["POST"])
+def salario():
+    salario = converter_valor(request.form["salario"])
+    if salario <= 0:
+        flash("Digite um valor válido para o salário")
+        return redirect(url_for("index"))
+    conn = sqlite3.connect(DATABASE)
+    conn.execute("INSERT OR REPLACE INTO config (chave, valor) VALUES ('salario',?)", (salario,))
+    conn.execute("DELETE FROM gastos")
+    conn.commit(); conn.close()
+    flash(f"Salário R$ {salario:.2f} definido! Mês zerado.")
+    return redirect(url_for("index"))
+
+@app.route("/gasto", methods=["POST"])
+def gasto():
+    valor = converter_valor(request.form["valor"])
+    if valor <= 0:
+        flash("Digite um valor válido para o gasto")
+        return redirect(url_for("index"))
+
+    hora_brasil = (datetime.now() - timedelta(hours=3)).strftime("%d/%m %H:%M")
+
+    conn = sqlite3.connect(DATABASE)
+    conn.execute("INSERT INTO gastos (categoria, valor, descricao, data) VALUES (?,?,?,?)",
+        (request.form["categoria"], valor, request.form.get("descricao", ""), hora_brasil))
+    conn.commit(); conn.close()
+    flash("Gasto lançado com sucesso!")
+    return redirect(url_for("index"))
+
+@app.route("/zerar")
+def zerar():
+    conn = sqlite3.connect(DATABASE)
+    conn.execute("DELETE FROM gastos")
+    conn.execute("UPDATE config SET valor=0 WHERE chave='salario'")
+    conn.commit(); conn.close()
+    flash("Mês zerado! Pode lançar novo salário.")
+    return redirect(url_for("index"))
+
+@app.route("/exportar")
+def exportar():
+    conn = sqlite3.connect(DATABASE)
+    gastos = conn.execute("SELECT * FROM gastos").fetchall()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Gastos"
+    ws.append(["Data", "Categoria", "Descrição", "Valor"])
+    for g in gastos:
+        ws.append([g[4], g[1], g[3], g[2]])
+    conn.close()
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(output, download_name="finanas.xlsx", as_attachment=True)
+
+if __name__ == '__main__':
+    app.run()
