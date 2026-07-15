@@ -1,6 +1,8 @@
-from flask import Flask, request, redirect, url_for, render_template_string, flash
+from flask import Flask, request, redirect, url_for, render_template_string, flash, send_file
 import sqlite3
 from datetime import datetime
+import io
+from openpyxl import Workbook
 
 app = Flask(__name__)
 app.secret_key = "finanas2025"
@@ -14,7 +16,8 @@ HTML = '''
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Finan-as V2</title>
+<title>Finan-as V3</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body{font-family:'Segoe UI',Arial;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);margin:0;padding:20px;min-height:100vh;color:#333}
 .container{max-width:1200px;margin:0 auto}
@@ -32,13 +35,18 @@ body{font-family:'Segoe UI',Arial;background:linear-gradient(135deg,#667eea 0%,#
 input{padding:10px;border:2px solid #ddd;border-radius:8px;width:120px;margin:5px}
 .flash{padding:15px;background:#d4edda;color:#155724;border-radius:8px;margin-bottom:15px;text-align:center}
 .salario-box{background:white;padding:20px;border-radius:15px;margin-bottom:20px;box-shadow:0 10px 30px rgba(0,0,0,0.2)}
+.historico{background:white;padding:20px;border-radius:15px;margin-bottom:20px;box-shadow:0 10px 30px rgba(0,0,0,0.2)}
+table{width:100%;border-collapse:collapse}
+td,th{padding:10px;border-bottom:1px solid #eee;text-align:left}
+canvas{max-width:400px;margin:20px auto}
 </style>
 </head>
 <body>
 <div class="container">
 <div class="header">
-<h1>📊 Finan-as V2</h1>
+<h1>📊 Finan-as V3</h1>
 <p>Saldo Total: <b>R$ {{ "%.2f"|format(salario_total - total_gasto) }}</b></p>
+<a href="/exportar" class="btn">📥 Baixar Excel</a>
 </div>
 
 {% with messages = get_flashed_messages() %}
@@ -49,7 +57,7 @@ input{padding:10px;border:2px solid #ddd;border-radius:8px;width:120px;margin:5p
 <form method="POST" action="/salario">
 <input type="text" name="salario" placeholder="Ex: 5000,00" required>
 <button class="btn" type="submit">Definir Salário</button>
-<a href="/zerar" class="btn" style="background:#e74c3c" onclick="return confirm('Tem certeza que quer zerar o mês?')">🔄 Zerar Mês</a>
+<a href="/zerar" class="btn" style="background:#e74c3c" onclick="return confirm('Tem certeza?')">🔄 Zerar Mês</a>
 </form>
 </div>
 
@@ -62,9 +70,7 @@ input{padding:10px;border:2px solid #ddd;border-radius:8px;width:120px;margin:5p
 <p>Gasto: R$ {{ "%.2f"|format(cat.gasto) }}</p>
 <p class="saldo">Saldo: R$ {{ "%.2f"|format(cat.saldo) }}</p>
 {% if cat.estourou %}<p class="alert">⚠️ ESTOUROU!</p>{% endif %}
-
 <div class="progresso"><div class="barra" style="width:{{ cat.percentual_gasto }}%"></div></div>
-
 <form method="POST" action="/gasto">
 <input type="hidden" name="categoria" value="{{ cat.nome }}">
 <input type="text" name="valor" placeholder="R$ 0,00" required>
@@ -74,7 +80,41 @@ input{padding:10px;border:2px solid #ddd;border-radius:8px;width:120px;margin:5p
 </div>
 {% endfor %}
 </div>
+
+<div class="card">
+<h3>📊 Gráfico de Gastos</h3>
+<canvas id="grafico"></canvas>
 </div>
+
+<div class="historico">
+<h3>📜 Histórico do Mês</h3>
+<table>
+<tr><th>Data</th><th>Categoria</th><th>Descrição</th><th>Valor</th></tr>
+{% for g in historico %}
+<tr>
+<td>{{ g.data }}</td>
+<td>{{ g.categoria }}</td>
+<td>{{ g.descricao }}</td>
+<td>R$ {{ "%.2f"|format(g.valor) }}</td>
+</tr>
+{% endfor %}
+</table>
+</div>
+
+</div>
+<script>
+const ctx = document.getElementById('grafico');
+new Chart(ctx, {
+type: 'pie',
+data: {
+labels: {{ labels|tojson }},
+datasets: [{
+data: {{ dados|tojson }},
+backgroundColor: ['#667eea','#764ba2','#f093fb','#f5576c']
+}]
+}
+});
+</script>
 </body>
 </html>
 '''
@@ -99,8 +139,12 @@ def index():
     salario = conn.execute("SELECT valor FROM config WHERE chave='salario'").fetchone()
     salario_total = salario[0] if salario else 0
     total_gasto = conn.execute("SELECT SUM(valor) FROM gastos").fetchone()[0] or 0
+    historico = conn.execute("SELECT * FROM gastos ORDER BY id DESC").fetchall()
+    historico = [{'data':h[4],'categoria':h[1],'descricao':h[3],'valor':h[2]} for h in historico]
 
     categorias = []
+    labels = []
+    dados = []
     for nome, perc in CATEGORIAS.items():
         definido = salario_total * (perc / 100)
         gasto = conn.execute("SELECT SUM(valor) FROM gastos WHERE categoria=?", (nome,)).fetchone()[0] or 0
@@ -108,35 +152,36 @@ def index():
         percentual_gasto = int((gasto/definido*100)) if definido>0 else 0
         if percentual_gasto > 100: percentual_gasto = 100
         categorias.append({'nome': nome, 'percentual': perc, 'definido': definido, 'gasto': gasto, 'saldo': saldo, 'estourou': saldo<0, 'percentual_gasto': percentual_gasto})
+        if gasto > 0:
+            labels.append(nome)
+            dados.append(gasto)
     conn.close()
-    return render_template_string(HTML, categorias=categorias, salario_total=salario_total, total_gasto=total_gasto)
+    return render_template_string(HTML, categorias=categorias, salario_total=salario_total, total_gasto=total_gasto, historico=historico, labels=labels, dados=dados)
 
 @app.route("/salario", methods=["POST"])
 def salario():
     salario = converter_valor(request.form["salario"])
     if salario <= 0:
-        flash("Digite um valor válido para o salário")
+        flash("Digite um valor válido")
         return redirect(url_for("index"))
     conn = sqlite3.connect(DATABASE)
     conn.execute("INSERT OR REPLACE INTO config (chave, valor) VALUES ('salario',?)", (salario,))
     conn.execute("DELETE FROM gastos")
     conn.commit(); conn.close()
-    flash(f"Salário R$ {salario:.2f} definido! Mês zerado.")
+    flash(f"Salário R$ {salario:.2f} definido!")
     return redirect(url_for("index"))
 
 @app.route("/gasto", methods=["POST"])
 def gasto():
     valor = converter_valor(request.form["valor"])
     if valor <= 0:
-        flash("Digite um valor válido para o gasto")
+        flash("Digite um valor válido")
         return redirect(url_for("index"))
-    categoria = request.form["categoria"]
-    descricao = request.form.get("descricao", "")
     conn = sqlite3.connect(DATABASE)
     conn.execute("INSERT INTO gastos (categoria, valor, descricao, data) VALUES (?,?,?,?)",
-        (categoria, valor, descricao, datetime.now().strftime("%d/%m %H:%M")))
+        (request.form["categoria"], valor, request.form.get("descricao", ""), datetime.now().strftime("%d/%m %H:%M")))
     conn.commit(); conn.close()
-    flash(f"Gasto de R$ {valor:.2f} lançado em {categoria}!")
+    flash("Gasto lançado!")
     return redirect(url_for("index"))
 
 @app.route("/zerar")
@@ -145,8 +190,24 @@ def zerar():
     conn.execute("DELETE FROM gastos")
     conn.execute("UPDATE config SET valor=0 WHERE chave='salario'")
     conn.commit(); conn.close()
-    flash("Mês zerado! Pode lançar novo salário.")
+    flash("Mês zerado!")
     return redirect(url_for("index"))
+
+@app.route("/exportar")
+def exportar():
+    conn = sqlite3.connect(DATABASE)
+    gastos = conn.execute("SELECT * FROM gastos").fetchall()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Gastos"
+    ws.append(["Data", "Categoria", "Descrição", "Valor"])
+    for g in gastos:
+        ws.append([g[4], g[1], g[3], g[2]])
+    conn.close()
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(output, download_name="finanas.xlsx", as_attachment=True)
 
 if __name__ == '__main__':
     app.run()
