@@ -49,7 +49,7 @@ input{padding:10px;border:2px solid #ddd;border-radius:8px;width:120px;margin:5p
 <form method="POST" action="/salario">
 <input type="text" name="salario" placeholder="Ex: 5000,00" required>
 <button class="btn" type="submit">Definir Salário</button>
-<a href="/zerar" class="btn" style="background:#e74c3c">🔄 Zerar Mês</a>
+<a href="/zerar" class="btn" style="background:#e74c3c" onclick="return confirm('Tem certeza que quer zerar o mês?')">🔄 Zerar Mês</a>
 </form>
 </div>
 
@@ -67,7 +67,7 @@ input{padding:10px;border:2px solid #ddd;border-radius:8px;width:120px;margin:5p
 
 <form method="POST" action="/gasto">
 <input type="hidden" name="categoria" value="{{ cat.nome }}">
-<input type="text" name="valor" placeholder="R$ 0,00">
+<input type="text" name="valor" placeholder="R$ 0,00" required>
 <input type="text" name="descricao" placeholder="Descrição">
 <button class="btn" type="submit">Lançar</button>
 </form>
@@ -86,7 +86,10 @@ def init_db():
     conn.commit(); conn.close()
 
 def converter_valor(v):
-    try: return float(str(v).strip().replace('.', '').replace(',', '.'))
+    if not v: return 0
+    v = str(v).strip().replace('R$', '').replace(' ', '')
+    v = v.replace('.', '').replace(',', '.')
+    try: return float(v)
     except: return 0
 
 @app.route("/")
@@ -111,9 +114,39 @@ def index():
 @app.route("/salario", methods=["POST"])
 def salario():
     salario = converter_valor(request.form["salario"])
+    if salario <= 0:
+        flash("Digite um valor válido para o salário")
+        return redirect(url_for("index"))
     conn = sqlite3.connect(DATABASE)
     conn.execute("INSERT OR REPLACE INTO config (chave, valor) VALUES ('salario',?)", (salario,))
     conn.execute("DELETE FROM gastos")
     conn.commit(); conn.close()
     flash(f"Salário R$ {salario:.2f} definido! Mês zerado.")
     return redirect(url_for("index"))
+
+@app.route("/gasto", methods=["POST"])
+def gasto():
+    valor = converter_valor(request.form["valor"])
+    if valor <= 0:
+        flash("Digite um valor válido para o gasto")
+        return redirect(url_for("index"))
+    categoria = request.form["categoria"]
+    descricao = request.form.get("descricao", "")
+    conn = sqlite3.connect(DATABASE)
+    conn.execute("INSERT INTO gastos (categoria, valor, descricao, data) VALUES (?,?,?,?)",
+        (categoria, valor, descricao, datetime.now().strftime("%d/%m %H:%M")))
+    conn.commit(); conn.close()
+    flash(f"Gasto de R$ {valor:.2f} lançado em {categoria}!")
+    return redirect(url_for("index"))
+
+@app.route("/zerar")
+def zerar():
+    conn = sqlite3.connect(DATABASE)
+    conn.execute("DELETE FROM gastos")
+    conn.execute("UPDATE config SET valor=0 WHERE chave='salario'")
+    conn.commit(); conn.close()
+    flash("Mês zerado! Pode lançar novo salário.")
+    return redirect(url_for("index"))
+
+if __name__ == '__main__':
+    app.run()
